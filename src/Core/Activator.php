@@ -103,6 +103,29 @@ final class Activator
             KEY confidence (confidence)
         ) {$charset};";
 
+        $sql[] = "CREATE TABLE {$prefix}patterns (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            uuid VARCHAR(64) NOT NULL,
+            session_uuid VARCHAR(64) NOT NULL,
+            user_id BIGINT UNSIGNED NULL,
+            domain VARCHAR(100) NOT NULL DEFAULT 'mind',
+            capability VARCHAR(100) NOT NULL,
+            pattern_name VARCHAR(190) NOT NULL,
+            pattern_summary TEXT NOT NULL,
+            polarity VARCHAR(40) NOT NULL DEFAULT 'challenge',
+            evidence_count INT NOT NULL DEFAULT 0,
+            average_strength DECIMAL(6,4) NOT NULL DEFAULT 0,
+            confidence_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+            confidence_label VARCHAR(40) NOT NULL DEFAULT 'early',
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uuid (uuid),
+            KEY session_uuid (session_uuid),
+            KEY user_id (user_id),
+            KEY capability (capability),
+            KEY confidence_label (confidence_label)
+        ) {$charset};";
+
         $sql[] = "CREATE TABLE {$prefix}events (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             event_uuid VARCHAR(64) NOT NULL,
