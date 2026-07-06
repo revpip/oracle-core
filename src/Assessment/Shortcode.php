@@ -2,6 +2,8 @@
 namespace OracleCore\Assessment;
 
 use OracleCore\Events\Logger;
+use OracleCore\Observations\EvidenceMapper;
+use OracleCore\Observations\ObservationRepository;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -86,6 +88,8 @@ final class Shortcode
         }
 
         $result = (new Scorer())->score($sessionUuid);
+        $observations = (new ObservationRepository())->forSession($sessionUuid);
+        $groups = (new ObservationRepository())->groupedByCapability($sessionUuid);
         $premiumUrl = get_option('oracle_core_premium_url', '');
 
         ob_start();
@@ -116,12 +120,24 @@ final class Shortcode
                 <?php endforeach; ?>
             </div>
 
-            <?php if (!empty($result['evidence'])): ?>
+            <?php if ($groups): ?>
                 <div class="oracle-panel">
-                    <h3>Examples from your answers</h3>
+                    <h3>Evidence map</h3>
+                    <p>These are structured observations created from your answers. They are evidence markers, not diagnoses.</p>
+                    <ul class="oracle-evidence-list">
+                        <?php foreach (array_slice($groups, 0, 8) as $group): ?>
+                            <li><strong><?php echo esc_html(ucwords(str_replace('_', ' ', $group['capability']))); ?></strong> — <?php echo esc_html((int) $group['evidence_count']); ?> observation(s), <?php echo esc_html(round((float) $group['average_strength'] * 100)); ?>% average strength</li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($observations)): ?>
+                <div class="oracle-panel">
+                    <h3>Why Oracle noticed these patterns</h3>
                     <ul>
-                        <?php foreach ($result['evidence'] as $line): ?>
-                            <li><?php echo esc_html($line); ?></li>
+                        <?php foreach (array_slice($observations, 0, 6) as $observation): ?>
+                            <li><?php echo esc_html($observation['observation_text']); ?> <em>(<?php echo esc_html($observation['confidence']); ?> confidence)</em></li>
                         <?php endforeach; ?>
                     </ul>
                 </div>
@@ -156,6 +172,7 @@ final class Shortcode
         $mouse_events = isset($_POST['oracle_mouse_events']) ? absint($_POST['oracle_mouse_events']) : 0;
         $answers = isset($_POST['answers']) && is_array($_POST['answers']) ? wp_unslash($_POST['answers']) : [];
         $email = isset($_POST['oracle_email']) ? sanitize_email(wp_unslash($_POST['oracle_email'])) : '';
+        $userId = get_current_user_id() ?: null;
 
         $quality = 100;
         $flags = [];
@@ -177,7 +194,7 @@ final class Shortcode
 
         $wpdb->insert($wpdb->prefix . 'oracle_sessions', [
             'uuid' => $session_uuid,
-            'user_id' => get_current_user_id() ?: null,
+            'user_id' => $userId,
             'email' => $email ?: null,
             'quality_score' => $quality,
             'fraud_flags' => $flags ? wp_json_encode($flags) : null,
@@ -186,15 +203,29 @@ final class Shortcode
             'completed_at' => current_time('mysql'),
         ]);
 
+        $mapper = new EvidenceMapper();
+        $observationRepo = new ObservationRepository();
+
         foreach ($answers as $question_uuid => $answer) {
+            $questionUuid = sanitize_text_field($question_uuid);
+            $answerValue = max(0, min(4, (int) $answer));
+
             $wpdb->insert($wpdb->prefix . 'oracle_answers', [
                 'session_uuid' => $session_uuid,
-                'question_uuid' => sanitize_text_field($question_uuid),
-                'answer_value' => max(0, min(4, (int) $answer)),
+                'question_uuid' => $questionUuid,
+                'answer_value' => $answerValue,
                 'reading_time_ms' => 0,
                 'changed_count' => 0,
                 'created_at' => current_time('mysql'),
             ]);
+
+            $question = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}oracle_questions WHERE uuid = %s", $questionUuid));
+            if ($question) {
+                $observation = $mapper->mapAnswer($question, $answerValue, $session_uuid, $userId);
+                if ($observation) {
+                    $observationRepo->create($observation);
+                }
+            }
         }
 
         (new Logger())->event('assessment_completed', $session_uuid, [
