@@ -79,6 +79,30 @@ final class Activator
             KEY question_uuid (question_uuid)
         ) {$charset};";
 
+        $sql[] = "CREATE TABLE {$prefix}observations (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            uuid VARCHAR(64) NOT NULL,
+            session_uuid VARCHAR(64) NOT NULL,
+            user_id BIGINT UNSIGNED NULL,
+            source_type VARCHAR(40) NOT NULL DEFAULT 'assessment',
+            source_uuid VARCHAR(64) NULL,
+            domain VARCHAR(100) NOT NULL DEFAULT 'mind',
+            capability VARCHAR(100) NOT NULL,
+            behaviour VARCHAR(150) NOT NULL,
+            observation_text TEXT NOT NULL,
+            strength DECIMAL(6,4) NOT NULL DEFAULT 0,
+            confidence VARCHAR(40) NOT NULL DEFAULT 'early',
+            polarity VARCHAR(40) NOT NULL DEFAULT 'challenge',
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uuid (uuid),
+            KEY session_uuid (session_uuid),
+            KEY user_id (user_id),
+            KEY capability (capability),
+            KEY behaviour (behaviour),
+            KEY confidence (confidence)
+        ) {$charset};";
+
         $sql[] = "CREATE TABLE {$prefix}events (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             event_uuid VARCHAR(64) NOT NULL,
