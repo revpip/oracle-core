@@ -22,6 +22,10 @@ final class Shortcode
         wp_enqueue_style('oracle-core-frontend');
         wp_enqueue_script('oracle-core-frontend');
 
+        if (isset($_GET['oracle_result'])) {
+            return $this->renderResult(sanitize_text_field(wp_unslash($_GET['oracle_result'])));
+        }
+
         $questions = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}oracle_questions WHERE is_active = 1 ORDER BY sort_order ASC");
         if (!$questions) {
             return '<div class="oracle-assessment"><p>No Oracle questions are currently active.</p></div>';
@@ -68,6 +72,72 @@ final class Shortcode
 
                 <button type="submit" class="oracle-submit">Reveal my pattern map</button>
             </form>
+        </div>
+        <?php
+        return (string) ob_get_clean();
+    }
+
+    private function renderResult(string $sessionUuid): string
+    {
+        global $wpdb;
+        $session = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}oracle_sessions WHERE uuid = %s", $sessionUuid));
+        if (!$session) {
+            return '<div class="oracle-assessment"><p>We could not find that Oracle result.</p></div>';
+        }
+
+        $result = (new Scorer())->score($sessionUuid);
+        $premiumUrl = get_option('oracle_core_premium_url', '');
+
+        ob_start();
+        ?>
+        <div class="oracle-assessment oracle-results">
+            <div class="oracle-hero">
+                <p class="oracle-kicker">Your Oracle Pattern Map</p>
+                <h2>Your self-reflection report is ready</h2>
+                <p>This is an early pattern map based on your answers. It is not a diagnosis, but it can help you decide what may be worth exploring further.</p>
+            </div>
+
+            <div class="oracle-result-meta">
+                <div><strong><?php echo esc_html($result['overall_confidence']); ?></strong><span>Evidence confidence</span></div>
+                <div><strong><?php echo esc_html(round((float) $session->quality_score)); ?>%</strong><span>Response quality</span></div>
+            </div>
+
+            <h3>What stood out</h3>
+            <div class="oracle-score-list">
+                <?php foreach (array_slice($result['scores'], 0, 6) as $score): ?>
+                    <div class="oracle-score-card">
+                        <div class="oracle-score-top">
+                            <strong><?php echo esc_html($score['label']); ?></strong>
+                            <span><?php echo esc_html($score['score']); ?>%</span>
+                        </div>
+                        <div class="oracle-bar"><span style="width: <?php echo esc_attr($score['score']); ?>%"></span></div>
+                        <p><?php echo esc_html($score['level']); ?> · <?php echo esc_html($score['evidence_count']); ?> supporting answer(s)</p>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if (!empty($result['evidence'])): ?>
+                <div class="oracle-panel">
+                    <h3>Examples from your answers</h3>
+                    <ul>
+                        <?php foreach ($result['evidence'] as $line): ?>
+                            <li><?php echo esc_html($line); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
+            <div class="oracle-panel oracle-safe-note">
+                <h3>Suggested next step</h3>
+                <p>If these patterns feel familiar or affect your daily life, consider discussing them with a GP, therapist, counsellor or qualified assessor. This report can help you describe what you have noticed.</p>
+            </div>
+
+            <div class="oracle-actions">
+                <button onclick="window.print()" class="oracle-submit" type="button">Print or save report</button>
+                <?php if ($premiumUrl): ?>
+                    <a class="oracle-submit oracle-secondary" href="<?php echo esc_url($premiumUrl); ?>">Unlock advanced report</a>
+                <?php endif; ?>
+            </div>
         </div>
         <?php
         return (string) ob_get_clean();
