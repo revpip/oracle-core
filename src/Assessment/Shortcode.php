@@ -4,6 +4,8 @@ namespace OracleCore\Assessment;
 use OracleCore\Events\Logger;
 use OracleCore\Observations\EvidenceMapper;
 use OracleCore\Observations\ObservationRepository;
+use OracleCore\Patterns\PatternBuilder;
+use OracleCore\Patterns\PatternRepository;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -88,8 +90,10 @@ final class Shortcode
         }
 
         $result = (new Scorer())->score($sessionUuid);
-        $observations = (new ObservationRepository())->forSession($sessionUuid);
-        $groups = (new ObservationRepository())->groupedByCapability($sessionUuid);
+        $observationRepo = new ObservationRepository();
+        $observations = $observationRepo->forSession($sessionUuid);
+        $groups = $observationRepo->groupedByCapability($sessionUuid);
+        $patterns = (new PatternRepository())->forSession($sessionUuid);
         $premiumUrl = get_option('oracle_core_premium_url', '');
 
         ob_start();
@@ -105,6 +109,22 @@ final class Shortcode
                 <div><strong><?php echo esc_html($result['overall_confidence']); ?></strong><span>Evidence confidence</span></div>
                 <div><strong><?php echo esc_html(round((float) $session->quality_score)); ?>%</strong><span>Response quality</span></div>
             </div>
+
+            <?php if ($patterns): ?>
+                <h3>Pattern Engine</h3>
+                <div class="oracle-score-list">
+                    <?php foreach (array_slice($patterns, 0, 6) as $pattern): ?>
+                        <div class="oracle-score-card oracle-pattern-card">
+                            <div class="oracle-score-top">
+                                <strong><?php echo esc_html($pattern['pattern_name']); ?></strong>
+                                <span><?php echo esc_html($pattern['confidence_label']); ?></span>
+                            </div>
+                            <div class="oracle-bar"><span style="width: <?php echo esc_attr(round((float) $pattern['confidence_score'])); ?>%"></span></div>
+                            <p><?php echo esc_html($pattern['pattern_summary']); ?></p>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
 
             <h3>What stood out</h3>
             <div class="oracle-score-list">
@@ -228,10 +248,14 @@ final class Shortcode
             }
         }
 
+        $patterns = (new PatternBuilder())->buildForSession($session_uuid, $userId, $quality);
+        (new PatternRepository())->replaceForSession($session_uuid, $patterns);
+
         (new Logger())->event('assessment_completed', $session_uuid, [
             'elapsed_seconds' => $elapsed,
             'quality_score' => $quality,
             'flags' => $flags,
+            'patterns_created' => count($patterns),
         ]);
 
         $url = add_query_arg(['oracle_result' => $session_uuid], wp_get_referer() ?: home_url('/'));
