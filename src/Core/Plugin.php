@@ -2,6 +2,7 @@
 namespace OracleCore\Core;
 
 use OracleCore\Admin\Admin;
+use OracleCore\Admin\SessionsAdmin;
 use OracleCore\Assessment\Shortcode;
 
 if (!defined('ABSPATH')) {
@@ -17,6 +18,7 @@ final class Plugin
         add_action('admin_enqueue_scripts', [$this, 'registerAdminAssets']);
 
         (new Admin())->register();
+        (new SessionsAdmin())->register();
         (new Shortcode())->register();
     }
 
